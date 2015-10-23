@@ -21,16 +21,21 @@ YES    version     print Go version    				 -> Just a basic version printout.
 NO     vet         run go tool vet on packages
 ```
 
-run/test would rely on build, which would automatically build a docker image and run it.
+`get` sub-command:
+------------------
+**possible strategy**
 
+I identified two sructs, which we can hijack for the odoo use case:
 
-As for the get command, there are currently identified two sructs, which we can hijack for the odoo use case:
-
-1. The *Package struct, which hold's a package (= "odoo-modules") meta information.
+1. The `*Package` struct, which hold's a package (= "odoo-modules") meta information.
 	https://github.com/blaggacao/vodoo/blob/1486b12afc6acdfc8cb6730095b7a4588e8f1895/pkg.go#L23-L78
-2. The buildContext which contains information about the language (which could be manipulated in an odoo specific way)
+2. The `buildContext` which contains information about the language (which could be manipulated in an odoo specific way)
 	I'm still not able to figure out, where exactly this is constructed, but it contains:
+
 	```
 	build.Context{GOARCH:"386", GOOS:"windows", GOROOT:"B:\\Go\\", GOPATH:"B:\\GoPath", CgoEnabled:true, UseAllFiles:false, Compiler:"gc", BuildTags:[]string(nil), ReleaseTags:[]string{"go1.1", "go1.2", "go1.3", "go1.4"}, InstallSuffix:"", JoinPath:(func(...string) string)(nil), SplitPathList:(func(string) []string)(nil), IsAbsPath:(func(string) bool)(nil), IsDir:(func(string) bool)(nil), HasSubdir:(func(string, string) (string, bool))(nil), ReadDir:(func(string) ([]os.FileInfo, error))(nil), OpenFile:(func(string) (io.ReadCloser, error))(nil)}
 	```
-Next goal would be to hack the GOPATH and make it an VODOOPATH to have an early demonstrate binary, that would be already functional for setting up and organizing local odoo repositories.
+
+next steps:
+-----------
+- Hack the GOPATH and make it an VODOOPATH to produce an early showcase binary to help people understand what this is about.

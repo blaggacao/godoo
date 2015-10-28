@@ -534,7 +534,7 @@ var cmdCache = map[string]*Package{}
 // loadPackage accepts pseudo-paths beginning with cmd/ to denote commands
 // in the Go command directory, as well as paths to those directories.
 func loadPackage(arg string, stk *importStack) *Package {
-	if build.IsLocalImport(arg) {
+	if build.IsLocalImport(arg) { // TODO Call to build.
 		dir := arg
 		if !filepath.IsAbs(dir) {
 			if abs, err := filepath.Abs(dir); err == nil {
@@ -542,6 +542,7 @@ func loadPackage(arg string, stk *importStack) *Package {
 				dir = abs
 			}
 		}
+		// Map gorootSrc to Odoo
 		if sub, ok := hasSubdir(gorootSrc, dir); ok && strings.HasPrefix(sub, "cmd/") && !strings.Contains(sub[4:], "/") {
 			arg = sub
 		}

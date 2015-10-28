@@ -125,8 +125,8 @@ func main() {
 	// Diagnose common mistake: GOPATH==GOROOT.
 	// This setting is equivalent to not setting GOPATH at all,
 	// which is not what most people want when they do it.
-	if gopath := os.Getenv("GOPATH"); gopath == runtime.GOROOT() {
-		fmt.Fprintf(os.Stderr, "warning: GOPATH set to GOROOT (%s) has no effect\n", gopath)
+	if gopath := os.Getenv("OPATH"); gopath == runtime.GOROOT() {
+		fmt.Fprintf(os.Stderr, "warning: OPATH set to OROOT (%s) has no effect\n", gopath)
 	}
 
 	for _, cmd := range commands {
@@ -228,7 +228,7 @@ func help(args []string) {
 		return
 	}
 	if len(args) != 1 {
-		fmt.Fprintf(os.Stderr, "usage: go help command\n\nToo many arguments given.\n")
+		fmt.Fprintf(os.Stderr, "usage: godoo help command\n\nToo many arguments given.\n")
 		os.Exit(2) // failed at 'go help'
 	}
 
@@ -251,7 +251,7 @@ func help(args []string) {
 		}
 	}
 
-	fmt.Fprintf(os.Stderr, "Unknown help topic %#q.  Run 'go help'.\n", arg)
+	fmt.Fprintf(os.Stderr, "Unknown help topic %#q.  Run 'godoo help'.\n", arg)
 	os.Exit(2) // failed at 'go help cmd'
 }
 
@@ -279,7 +279,7 @@ func importPathsNoDotExpansion(args []string) []string {
 		} else {
 			a = path.Clean(a)
 		}
-		if a == "all" || a == "std" {
+		if a == "all" {
 			out = append(out, allPackages(a)...)
 			continue
 		}
@@ -391,50 +391,18 @@ func allPackages(pattern string) []string {
 
 func matchPackages(pattern string) []string {
 	match := func(string) bool { return true }
-	if pattern != "all" && pattern != "std" {
+	if pattern != "all" {
 		match = matchPattern(pattern)
 	}
 
 	have := map[string]bool{
 		"builtin": true, // ignore pseudo-package that exists only for documentation
 	}
-	if !buildContext.CgoEnabled {
-		have["runtime/cgo"] = true // ignore during walk
-	}
+
 	var pkgs []string
 
-	// Commands
-	cmd := filepath.Join(goroot, "src/cmd") + string(filepath.Separator)
-	filepath.Walk(cmd, func(path string, fi os.FileInfo, err error) error {
-		if err != nil || !fi.IsDir() || path == cmd {
-			return nil
-		}
-		name := path[len(cmd):]
-		// Commands are all in cmd/, not in subdirectories.
-		if strings.Contains(name, string(filepath.Separator)) {
-			return filepath.SkipDir
-		}
+	for _, src := range buildContext.SrcDirs() { // TODO referenc to buildContext
 
-		_, err = build.ImportDir(path, 0)
-		if err != nil {
-			return nil
-		}
-
-		// We use, e.g., cmd/gofmt as the pseudo import path for gofmt.
-		name = "cmd/" + name
-		if !have[name] {
-			have[name] = true
-			if match(name) {
-				pkgs = append(pkgs, name)
-			}
-		}
-		return nil
-	})
-
-	for _, src := range buildContext.SrcDirs() {
-		if pattern == "std" && src != gorootSrcPkg {
-			continue
-		}
 		src = filepath.Clean(src) + string(filepath.Separator)
 		filepath.Walk(src, func(path string, fi os.FileInfo, err error) error {
 			if err != nil || !fi.IsDir() || path == src {
@@ -448,15 +416,12 @@ func matchPackages(pattern string) []string {
 			}
 
 			name := filepath.ToSlash(path[len(src):])
-			if pattern == "std" && strings.Contains(name, ".") {
-				return filepath.SkipDir
-			}
 			if have[name] {
 				return nil
 			}
 			have[name] = true
 
-			_, err = build.ImportDir(path, 0)
+			_, err = build.ImportDir(path, 0) // TODO refernce to build.
 			if err != nil && strings.Contains(err.Error(), "no Go source files") {
 				return nil
 			}
@@ -514,7 +479,7 @@ func matchPackagesInFS(pattern string) []string {
 		if !match(name) {
 			return nil
 		}
-		if _, err = build.ImportDir(path, 0); err != nil {
+		if _, err = build.ImportDir(path, 0); err != nil { // TODO refernce to build.
 			return nil
 		}
 		pkgs = append(pkgs, name)

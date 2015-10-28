@@ -56,12 +56,10 @@ See also: go build, go install, go clean.
 	`,
 }
 
-var getD = cmdGet.Flag.Bool("d", false, "")
+var getS = cmdGet.Flag.Bool("s", false, "")
 var getU = cmdGet.Flag.Bool("u", false, "")
-var getFix = cmdGet.Flag.Bool("fix", false, "")
 
 func init() {
-	addBuildFlags(cmdGet)
 	cmdGet.Run = runGet // break init loop
 }
 
@@ -86,15 +84,6 @@ func runGet(cmd *Command, args []string) {
 
 	args = importPaths(args)
 
-	// Phase 3.  Install.
-	if *getD {
-		// Download only.
-		// Check delayed until now so that importPaths
-		// has a chance to print errors.
-		return
-	}
-
-	runInstall(cmd, args)
 }
 
 // downloadPath prepares the list of paths to pass to download.
@@ -103,18 +92,18 @@ func runGet(cmd *Command, args []string) {
 // in the hope that we can figure out the repository from the
 // initial ...-free prefix.
 func downloadPaths(args []string) []string {
-	args = importPathsNoDotExpansion(args)
+	args = importPathsNoDotExpansion(args) // OK
 	var out []string
 	for _, a := range args {
 		if strings.Contains(a, "...") {
 			var expand []string
 			// Use matchPackagesInFS to avoid printing
-			// warnings.  They will be printed by the 
+			// warnings.  They will be printed by the
 			// eventual call to importPaths instead.
-			if build.IsLocalImport(a) {
-				expand = matchPackagesInFS(a)
+			if build.IsLocalImport(a) { // TODO: Call to build to determine if it is a local import ref.
+				expand = matchPackagesInFS(a) // OK
 			} else {
-				expand = matchPackages(a)
+				expand = matchPackages(a) // OK
 			}
 			if len(expand) > 0 {
 				out = append(out, expand...)
@@ -142,10 +131,10 @@ var downloadRootCache = map[string]bool{}
 // download runs the download half of the get command
 // for the package named by the argument.
 func download(arg string, stk *importStack) {
-	p := loadPackage(arg, stk)
+	p := loadPackage(arg, stk) // TODO Various calls to pkg.go
 
 	// There's nothing to do if this is a package in the standard library.
-	if p.Standard {
+	if p.Standard { // NOTE corresponds to odoo standard addons.
 		return
 	}
 
@@ -174,7 +163,7 @@ func download(arg string, stk *importStack) {
 		// We delay this until after reloadPackage so that the old entry
 		// for p has been replaced in the package cache.
 		if wildcardOkay && strings.Contains(arg, "...") {
-			if build.IsLocalImport(arg) {
+			if build.IsLocalImport(arg) { //TODO Same call to build.
 				args = matchPackagesInFS(arg)
 			} else {
 				args = matchPackages(arg)
@@ -194,7 +183,7 @@ func download(arg string, stk *importStack) {
 		pkgs = pkgs[:0]
 		for _, arg := range args {
 			stk.push(arg)
-			p := loadPackage(arg, stk)
+			p := loadPackage(arg, stk) // TODO Various calls to pkg.go
 			stk.pop()
 			if p.Error != nil {
 				errorf("%s", p.Error)
@@ -207,17 +196,6 @@ func download(arg string, stk *importStack) {
 	// Process package, which might now be multiple packages
 	// due to wildcard expansion.
 	for _, p := range pkgs {
-		if *getFix {
-			run(stringList(tool("fix"), relPaths(p.gofiles)))
-
-			// The imports might have changed, so reload again.
-			p = reloadPackage(arg, stk)
-			if p.Error != nil {
-				errorf("%s", p.Error)
-				return
-			}
-		}
-
 		// Process dependencies, now that we know what they are.
 		for _, dep := range p.deps {
 			download(dep.ImportPath, stk)
@@ -233,7 +211,7 @@ func downloadPackage(p *Package) error {
 		repo, rootPath string
 		err            error
 	)
-	if p.build.SrcRoot != "" {
+	if p.build.SrcRoot != "" { // TODO unsure: p.build
 		// Directory exists.  Look for checkout along path to src.
 		vcs, rootPath, err = vcsForDir(p)
 		if err != nil {
@@ -254,12 +232,10 @@ func downloadPackage(p *Package) error {
 		// Package not found.  Put in first directory of $GOPATH or else $GOROOT.
 		// Guard against people setting GOPATH=$GOROOT.  We have to use
 		// $GOROOT's directory hierarchy (src/pkg, not just src) in that case.
-		if list := filepath.SplitList(buildContext.GOPATH); len(list) > 0 && list[0] != goroot {
-			p.build.SrcRoot = filepath.Join(list[0], "src")
-			p.build.PkgRoot = filepath.Join(list[0], "pkg")
+		if list := filepath.SplitList(buildContext.GOPATH); len(list) > 0 && list[0] != goroot { // TODO Reference to GoPath and GoRoot
+			p.build.SrcRoot = list[0]
 		} else {
-			p.build.SrcRoot = filepath.Join(goroot, "src", "pkg")
-			p.build.PkgRoot = filepath.Join(goroot, "pkg")
+			p.build.SrcRoot = filepath.Join(goroot, "oPath")
 		}
 	}
 	root := filepath.Join(p.build.SrcRoot, rootPath)
@@ -315,7 +291,7 @@ func downloadPackage(p *Package) error {
 	if err != nil {
 		return err
 	}
-	vers := runtime.Version()
+	vers := "9.0" // TODO Get the current Odoo Version, formerly: runtime.Version()
 	if i := strings.Index(vers, " "); i >= 0 {
 		vers = vers[:i]
 	}
@@ -331,7 +307,7 @@ func downloadPackage(p *Package) error {
 // have no unnecessary leading zeros, and the version cannot
 // end in .0 - it is go1, not go1.0 or go1.0.0.
 var goTag = regexp.MustCompile(
-	`^go((0|[1-9][0-9]{0,3})\.)*([1-9][0-9]{0,3})$`,
+	`^((0|[1-9][0-9]{0,2})\.)*([0-9])$`, // NOTE match odoo tags
 )
 
 // selectTag returns the closest matching tag for a given version.
@@ -340,38 +316,19 @@ var goTag = regexp.MustCompile(
 // Version "release.rN" matches tags of the form "go.rN" (N being a floating-point number).
 // Version "weekly.YYYY-MM-DD" matches tags like "go.weekly.YYYY-MM-DD".
 func selectTag(goVersion string, tags []string) (match string) {
-	const rPrefix = "release.r"
-	if strings.HasPrefix(goVersion, rPrefix) {
-		p := "go.r"
-		v, err := strconv.ParseFloat(goVersion[len(rPrefix):], 64)
-		if err != nil {
-			return ""
-		}
-		var matchf float64
-		for _, t := range tags {
-			if !strings.HasPrefix(t, p) {
-				continue
-			}
-			tf, err := strconv.ParseFloat(t[len(p):], 64)
-			if err != nil {
-				continue
-			}
-			if matchf < tf && tf <= v {
-				match, matchf = t, tf
-			}
-		}
-	}
-
-	const wPrefix = "weekly."
-	if strings.HasPrefix(goVersion, wPrefix) {
-		p := "go.weekly."
-		v := goVersion[len(wPrefix):]
-		for _, t := range tags {
-			if !strings.HasPrefix(t, p) {
-				continue
-			}
-			if match < t && t[len(p):] <= v {
-				match = t
+	const wMark = ".weekly."
+	if strings.Contains(goVersion, wMark) {
+		b := strings.Split(goVersion, wMark)[0] // "9.0"
+		if goTag.MatchString(b) {
+			p := strings.SplitAfter(goVersion, wMark)[0] // "9.0.weekly."
+			v := strings.SplitAfter(goVersion, wMark)[1] // "2015-10-31"
+			for _, t := range tags {
+				if !strings.Contains(t, p) {
+					continue
+				}
+				if match < t && t[len(p):] <= v {
+					match = t
+				}
 			}
 		}
 	}
@@ -403,8 +360,8 @@ func cmpGoVersion(x, y string) int {
 	}
 
 	// Compare numbers in sequence.
-	xx := strings.Split(x[len("go"):], ".")
-	yy := strings.Split(y[len("go"):], ".")
+	xx := strings.Split(x, ".")
+	yy := strings.Split(y, ".")
 
 	for i := 0; i < len(xx) && i < len(yy); i++ {
 		// The Atoi are guaranteed to succeed
